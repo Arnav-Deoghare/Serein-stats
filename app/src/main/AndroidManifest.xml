@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Screen time data -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
+
+    <!-- Receive broadcasts from Zen Launcher -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission"/>
+
+    <application
+        android:label="Serein"
+        android:theme="@style/Theme.Serein"
+        android:allowBackup="false">
+
+        <!-- Main stats screen -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Receives limit-hit broadcasts FROM Zen Launcher -->
+        <receiver
+            android:name=".receiver.ZenBroadcastReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.zen.launcher.LIMIT_UPDATE"/>
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

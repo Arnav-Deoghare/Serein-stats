@@ -1,0 +1,158 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.serein.stats"
+4    android:versionCode="1"
+5    android:versionName="0.1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="34" />
+10
+11    <!-- Screen time data -->
+12    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+12-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:6:5-7:46
+12-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:6:22-75
+13
+14    <!-- Receive broadcasts from Zen Launcher -->
+15    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+15-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:10:5-80
+15-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:10:22-78
+16    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+16-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:11:5-12:52
+16-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:11:22-74
+17
+18    <permission
+18-->[androidx.core:core:1.12.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/fede64c6c39c71cdbcb9ef275b372f79/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
+19        android:name="com.serein.stats.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+19-->[androidx.core:core:1.12.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/fede64c6c39c71cdbcb9ef275b372f79/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
+20        android:protectionLevel="signature" />
+20-->[androidx.core:core:1.12.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/fede64c6c39c71cdbcb9ef275b372f79/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
+21
+22    <uses-permission android:name="com.serein.stats.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+22-->[androidx.core:core:1.12.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/fede64c6c39c71cdbcb9ef275b372f79/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
+22-->[androidx.core:core:1.12.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/fede64c6c39c71cdbcb9ef275b372f79/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
+23
+24    <application
+24-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:14:5-38:19
+25        android:allowBackup="false"
+25-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:17:9-36
+26        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+26-->[androidx.core:core:1.12.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/fede64c6c39c71cdbcb9ef275b372f79/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
+27        android:debuggable="true"
+28        android:extractNativeLibs="false"
+29        android:label="Serein"
+29-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:15:9-31
+30        android:theme="@style/Theme.Serein" >
+30-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:16:9-44
+31
+32        <!-- Main stats screen -->
+33        <activity
+33-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:20:9-27:20
+34            android:name="com.serein.stats.ui.MainActivity"
+34-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:21:13-44
+35            android:exported="true" >
+35-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:22:13-36
+36            <intent-filter>
+36-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:23:13-26:29
+37                <action android:name="android.intent.action.MAIN" />
+37-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:24:17-68
+37-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:24:25-66
+38
+39                <category android:name="android.intent.category.LAUNCHER" />
+39-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:25:17-76
+39-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:25:27-74
+40            </intent-filter>
+41        </activity>
+42
+43        <!-- Receives limit-hit broadcasts FROM Zen Launcher -->
+44        <receiver
+44-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:30:9-36:20
+45            android:name="com.serein.stats.receiver.ZenBroadcastReceiver"
+45-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:31:13-58
+46            android:exported="true" >
+46-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:32:13-36
+47            <intent-filter>
+47-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:33:13-35:29
+48                <action android:name="com.zen.launcher.LIMIT_UPDATE" />
+48-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:34:17-71
+48-->/Users/arnavdeoghare/Desktop/serein-time/serein-stats/app/src/main/AndroidManifest.xml:34:25-69
+49            </intent-filter>
+50        </receiver>
+51
+52        <provider
+52-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+53            android:name="androidx.startup.InitializationProvider"
+53-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:25:13-67
+54            android:authorities="com.serein.stats.androidx-startup"
+54-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:26:13-68
+55            android:exported="false" >
+55-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:27:13-37
+56            <meta-data
+56-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+57                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+57-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:30:17-75
+58                android:value="androidx.startup" />
+58-->[androidx.emoji2:emoji2:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/2c60cb91b9a19b050f54b4f516d01c07/transformed/jetified-emoji2-1.3.0/AndroidManifest.xml:31:17-49
+59            <meta-data
+59-->[androidx.lifecycle:lifecycle-process:2.7.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/28175db77ed42d1f0386fd566a88dbd8/transformed/jetified-lifecycle-process-2.7.0/AndroidManifest.xml:29:13-31:52
+60                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+60-->[androidx.lifecycle:lifecycle-process:2.7.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/28175db77ed42d1f0386fd566a88dbd8/transformed/jetified-lifecycle-process-2.7.0/AndroidManifest.xml:30:17-78
+61                android:value="androidx.startup" />
+61-->[androidx.lifecycle:lifecycle-process:2.7.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/28175db77ed42d1f0386fd566a88dbd8/transformed/jetified-lifecycle-process-2.7.0/AndroidManifest.xml:31:17-49
+62            <meta-data
+62-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:29:13-31:52
+63                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+63-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:30:17-85
+64                android:value="androidx.startup" />
+64-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:31:17-49
+65        </provider>
+66
+67        <service
+67-->[androidx.room:room-runtime:2.6.1] /Users/arnavdeoghare/.gradle/caches/transforms-3/08079a48eb109346d559e7e5b7133118/transformed/room-runtime-2.6.1/AndroidManifest.xml:24:9-28:63
+68            android:name="androidx.room.MultiInstanceInvalidationService"
+68-->[androidx.room:room-runtime:2.6.1] /Users/arnavdeoghare/.gradle/caches/transforms-3/08079a48eb109346d559e7e5b7133118/transformed/room-runtime-2.6.1/AndroidManifest.xml:25:13-74
+69            android:directBootAware="true"
+69-->[androidx.room:room-runtime:2.6.1] /Users/arnavdeoghare/.gradle/caches/transforms-3/08079a48eb109346d559e7e5b7133118/transformed/room-runtime-2.6.1/AndroidManifest.xml:26:13-43
+70            android:exported="false" />
+70-->[androidx.room:room-runtime:2.6.1] /Users/arnavdeoghare/.gradle/caches/transforms-3/08079a48eb109346d559e7e5b7133118/transformed/room-runtime-2.6.1/AndroidManifest.xml:27:13-37
+71
+72        <receiver
+72-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:34:9-52:20
+73            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+73-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:35:13-76
+74            android:directBootAware="false"
+74-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:36:13-44
+75            android:enabled="true"
+75-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:37:13-35
+76            android:exported="true"
+76-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:38:13-36
+77            android:permission="android.permission.DUMP" >
+77-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:39:13-57
+78            <intent-filter>
+78-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:40:13-42:29
+79                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+79-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:41:17-91
+79-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:41:25-88
+80            </intent-filter>
+81            <intent-filter>
+81-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:43:13-45:29
+82                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+82-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:44:17-85
+82-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:44:25-82
+83            </intent-filter>
+84            <intent-filter>
+84-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:46:13-48:29
+85                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+85-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:47:17-88
+85-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:47:25-85
+86            </intent-filter>
+87            <intent-filter>
+87-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:49:13-51:29
+88                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+88-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:50:17-95
+88-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/arnavdeoghare/.gradle/caches/transforms-3/12b147065f2ea5164ea7839ea8fcef15/transformed/jetified-profileinstaller-1.3.0/AndroidManifest.xml:50:25-92
+89            </intent-filter>
+90        </receiver>
+91    </application>
+92
+93</manifest>
