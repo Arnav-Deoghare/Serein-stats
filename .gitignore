@@ -1,0 +1,56 @@
+# ── Gradle ────────────────────────────────────────────────────
+.gradle/
+build/
+**/build/
+
+# ── Local config (machine-specific, never commit) ─────────────
+local.properties
+*.local.properties
+
+# ── Android Studio / IntelliJ ─────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+**/.DS_Store
+__MACOSX/
+
+# ── Kotlin / Java compiled output ────────────────────────────
+*.class
+*.jar
+*.aar
+*.ap_
+
+# ── Signing keys (NEVER commit these) ────────────────────────
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# ── APK / AAB output ─────────────────────────────────────────
+*.apk
+*.aab
+
+# ── Generated sources (Room, KSP) ────────────────────────────
+app/build/generated/
+
+# ── OS junk ──────────────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ── VSCode ───────────────────────────────────────────────────
+.vscode/
+*.code-workspace
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Sensitive / environment ───────────────────────────────────
+.env
+.env.*
+secrets.properties
