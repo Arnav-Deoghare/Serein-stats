@@ -38,7 +38,8 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
-
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 // ═══════════════════════════════════════════════════════════════
 // COLOR SCHEMES
 // ═══════════════════════════════════════════════════════════════
@@ -165,7 +166,38 @@ object UsageHelper {
         set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0)
         if (offset != 0) add(Calendar.DAY_OF_YEAR, offset)
     }.timeInMillis
+    suspend fun getPhoneUnlockCount(ctx: Context): Int =
+        withContext(Dispatchers.IO) {
 
+            val usm =
+                ctx.getSystemService(Context.USAGE_STATS_SERVICE)
+                        as UsageStatsManager
+
+            val now = System.currentTimeMillis()
+
+            val events = usm.queryEvents(startOfDay(), now)
+
+            val ev = UsageEvents.Event()
+
+            var unlocks = 0
+            var lastUnlock = 0L
+
+            while (events.hasNextEvent()) {
+
+                events.getNextEvent(ev)
+
+                if (ev.eventType == UsageEvents.Event.KEYGUARD_HIDDEN) {
+
+                    // debounce duplicate unlock events
+                    if (ev.timeStamp - lastUnlock > 3000) {
+                        unlocks++
+                        lastUnlock = ev.timeStamp
+                    }
+                }
+            }
+
+            unlocks
+        }
     suspend fun getApps(ctx: Context): List<AppUsage> = withContext(Dispatchers.IO) {
         val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val pm  = ctx.packageManager
@@ -197,7 +229,13 @@ object UsageHelper {
             when (ev.eventType) {
                 UsageEvents.Event.MOVE_TO_FOREGROUND -> {
                     starts[pkg] = ev.timeStamp
-                    unlocks[pkg] = (unlocks[pkg] ?: 0) + 1
+                    val last = lastUnlock[pkg] ?: 0L
+
+                    // only count a new open if enough time passed
+                    if (ev.timeStamp - last > 15_000) {
+                        unlocks[pkg] = (unlocks[pkg] ?: 0) + 1
+                        lastUnlock[pkg] = ev.timeStamp
+}                   
                     if (!firstUnlock.containsKey(pkg)) firstUnlock[pkg] = ev.timeStamp
                     lastUnlock[pkg] = ev.timeStamp
                 }
@@ -444,126 +482,171 @@ fun PermissionScreen(c: SchemeColors, onGrant: () -> Unit) {
 // ═══════════════════════════════════════════════════════════════
 // MAIN NAV
 // ═══════════════════════════════════════════════════════════════
-
 @Composable
 fun MainNav(c: SchemeColors, scheme: ColorScheme, onSchemeChange: (ColorScheme) -> Unit) {
     val ctx = LocalContext.current
     var tab  by remember { mutableStateOf(0) }
     var apps by remember { mutableStateOf<List<AppUsage>>(emptyList()) }
     var days by remember { mutableStateOf<List<DaySummary>>(emptyList()) }
+    var phoneUnlocks by remember { mutableStateOf(0) }
     var unlockBounds by remember { mutableStateOf<Pair<Long?,Long?>>(Pair(null,null)) }
     var lastWeekTotal by remember { mutableStateOf(0L) }
     var loading by remember { mutableStateOf(true) }
 
-    // FIX 7: pull-to-refresh counter — increment to trigger reload
+    // NEW
+    var selectedApp by remember { mutableStateOf<AppUsage?>(null) }
+
     var refreshKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(refreshKey) {
+    phoneUnlocks = UsageHelper.getPhoneUnlockCount(ctx)
+    while (true) {
+
         loading = true
-        apps         = UsageHelper.getApps(ctx)
-        days         = UsageHelper.getDays(ctx, 30)
+
+        apps = UsageHelper.getApps(ctx)
+        days = UsageHelper.getDays(ctx, 30)
         unlockBounds = UsageHelper.getTodayUnlockBounds(ctx)
-        lastWeekTotal= UsageHelper.getLastWeekTotal(ctx)
-        loading      = false
+        lastWeekTotal = UsageHelper.getLastWeekTotal(ctx)
+
+        loading = false
+
+        delay(15000)
+    }
+}
+    // NEW
+    if (selectedApp != null) {
+        AppDetailScreen(
+            c = c,
+            app = selectedApp!!,
+            onBack = { selectedApp = null }
+        )
+        return
     }
 
     val navItems = listOf("Today","Trends","Hours","Apps","Theme")
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Box(Modifier.fillMaxSize().padding(bottom = 64.dp)) {
+
             if (loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Reading your data…", color=c.text3, fontSize=14.sp)
                         Spacer(Modifier.height(6.dp))
-                        Text("This may take a moment",
-                            color=c.text3.copy(alpha=0.5f), fontSize=11.sp)
+                        Text(
+                            "This may take a moment",
+                            color=c.text3.copy(alpha=0.5f),
+                            fontSize=11.sp
+                        )
                     }
                 }
             } else {
+
                 when (tab) {
-                    0 -> TodayTab(c, apps, days, unlockBounds) { refreshKey++ }
-                    1 -> TrendsTab(c, scheme, days, apps, lastWeekTotal) { refreshKey++ }
-                    2 -> HeatTab(c, apps) { refreshKey++ }
-                    3 -> AllAppsTab(c, apps) { refreshKey++ }
+                    0 -> TodayTab(
+                        c,
+                        apps,
+                        days,
+                        unlockBounds,
+                        phoneUnlocks,
+                        { refreshKey++ },
+                        onOpenApp = { selectedApp = it }
+                    )
+                    1 -> TrendsTab(
+                        c,
+                        scheme,
+                        days,
+                        apps,
+                        lastWeekTotal
+                    ) { refreshKey++ }
+
+                    2 -> HeatTab(
+                        c,
+                        apps,
+                        { refreshKey++ },
+                        onOpenApp = { selectedApp = it }
+                    )
+
+                    3 -> AllAppsTab(
+                        c,
+                        apps,
+                        { refreshKey++ },
+                        onOpenApp = { selectedApp = it }
+                    )
+
                     4 -> ThemeTab(c, scheme, onSchemeChange)
                 }
             }
         }
 
-        // Bottom nav
         Column(Modifier.align(Alignment.BottomCenter)) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(c.border)
+            )
+
             Row(
-                Modifier.fillMaxWidth().background(c.bg).padding(vertical=8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(c.bg)
+                    .padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
+
                 navItems.forEachIndexed { i, label ->
+
                     val active = tab == i
+
                     Column(
-                        Modifier.weight(1f).clickable { tab = i }.padding(vertical=4.dp),
+                        Modifier
+                            .weight(1f)
+                            .clickable { tab = i }
+                            .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Box(Modifier.size(4.dp).clip(RoundedCornerShape(2.dp))
-                            .background(if (active) c.accent else Color.Transparent))
+
+                        Box(
+                            Modifier
+                                .size(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(if (active) c.accent else Color.Transparent)
+                        )
+
                         Spacer(Modifier.height(4.dp))
-                        Text(label,
+
+                        Text(
+                            label,
                             color = if (active) c.accent else c.text3,
                             fontSize = 11.sp,
                             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                            letterSpacing = 0.2.sp)
+                            letterSpacing = 0.2.sp
+                        )
                     }
                 }
             }
         }
     }
 }
-
-// ═══════════════════════════════════════════════════════════════
-// SHARED HEADER
-// ═══════════════════════════════════════════════════════════════
-
-@Composable
-fun ScreenHeader(c: SchemeColors, title: String, subtitle: String, onRefresh: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(start=28.dp, end=28.dp, top=52.dp, bottom=0.dp)) {
-        Row(Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically) {
-            Row(verticalAlignment=Alignment.CenterVertically,
-                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.size(20.dp).clip(RoundedCornerShape(6.dp))
-                    .background(c.accentFaint), contentAlignment=Alignment.Center) {
-                    Text("S", color=c.accent, fontSize=10.sp, fontWeight=FontWeight.Medium)
-                }
-                Text("SEREIN", color=c.accent, fontSize=9.sp,
-                    letterSpacing=3.sp, fontWeight=FontWeight.SemiBold)
-            }
-            // FIX 7: refresh button in every header
-            Text("↻ refresh", color=c.text3, fontSize=10.sp,
-                modifier=Modifier.clickable { onRefresh() }.padding(4.dp))
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(title, color=c.text, fontSize=26.sp, fontWeight=FontWeight.Thin)
-        Text(subtitle, color=c.text3, fontSize=11.sp, letterSpacing=0.3.sp)
-        Spacer(Modifier.height(16.dp))
-        HLine(c)
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════
 // TODAY TAB
 // ═══════════════════════════════════════════════════════════════
-
 @Composable
 fun TodayTab(
     c: SchemeColors,
     apps: List<AppUsage>,
     days: List<DaySummary>,
     unlockBounds: Pair<Long?,Long?>,
-    onRefresh: () -> Unit
-) {
+    phoneUnlocks: Int,
+    onRefresh: () -> Unit,
+    onOpenApp: (AppUsage) -> Unit
+)
+ {
     val total       = apps.sumOf { it.todayMinutes }
-    val unlocks     = apps.sumOf { it.unlockCount }
+    val unlocks = phoneUnlocks
     val sessions    = apps.sumOf { it.sessionCount }
     val deepSess    = apps.sumOf { app -> app.hourlyMinutes.count { it >= 10 }.toLong() }
     val avg7        = if (days.size>=7) days.takeLast(7).dropLast(1).map{it.minutes}.average().toLong() else 0L
@@ -791,7 +874,12 @@ fun TodayTab(
             val trendUp = app.todayMinutes > appAvg7 * 1.15f
             val trendDn = app.todayMinutes < appAvg7 * 0.85f
 
-            Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+            Column(
+                    Modifier
+        .fillMaxWidth()
+        .clickable { onOpenApp(app) }
+        .padding(horizontal = 28.dp)
+) {
                 Spacer(Modifier.height(12.dp))
                 Row(
                     Modifier.fillMaxWidth(),
@@ -1131,7 +1219,12 @@ fun TrendsTab(
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-fun HeatTab(c: SchemeColors, apps: List<AppUsage>, onRefresh: () -> Unit) {
+fun HeatTab(
+    c: SchemeColors,
+    apps: List<AppUsage>,
+    onRefresh: () -> Unit,
+    onOpenApp: (AppUsage) -> Unit
+){
     val merged    = IntArray(24)
     apps.forEach { a -> a.hourlyMinutes.forEachIndexed { h, m -> merged[h] += m } }
     val maxHour   = merged.maxOrNull()?.coerceAtLeast(1) ?: 1
@@ -1223,7 +1316,12 @@ fun HeatTab(c: SchemeColors, apps: List<AppUsage>, onRefresh: () -> Unit) {
 
         items(apps.take(5)) { app ->
             val appMax = app.hourlyMinutes.maxOrNull()?.coerceAtLeast(1) ?: 1
-            Column(Modifier.fillMaxWidth().padding(horizontal=28.dp, vertical=12.dp)) {
+            Column(
+    Modifier
+        .fillMaxWidth()
+        .clickable { onOpenApp(app) }
+        .padding(horizontal=28.dp, vertical=12.dp)
+) {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                     Text(app.label, color=c.text, fontSize=13.sp,
                         fontWeight=FontWeight.Light, modifier=Modifier.weight(1f),
@@ -1260,7 +1358,12 @@ fun HeatTab(c: SchemeColors, apps: List<AppUsage>, onRefresh: () -> Unit) {
 // ═══════════════════════════════════════════════════════════════
 
 @Composable
-fun AllAppsTab(c: SchemeColors, apps: List<AppUsage>, onRefresh: () -> Unit) {
+fun AllAppsTab(
+    c: SchemeColors,
+    apps: List<AppUsage>,
+    onRefresh: () -> Unit,
+    onOpenApp: (AppUsage) -> Unit
+) {
     var sortIdx by remember { mutableStateOf(0) }
     val sortOptions = listOf("Today","Week","Month","Lifetime","Opens")
     val sorted = remember(sortIdx, apps) {
@@ -1322,7 +1425,12 @@ fun AllAppsTab(c: SchemeColors, apps: List<AppUsage>, onRefresh: () -> Unit) {
         }
 
         items(sorted) { app ->
-            Column(Modifier.fillMaxWidth().padding(horizontal=28.dp)) {
+            Column(
+    Modifier
+        .fillMaxWidth()
+        .clickable { onOpenApp(app) }
+        .padding(horizontal = 28.dp)
+) {
                 Spacer(Modifier.height(14.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(end=6.dp)) {
@@ -1360,7 +1468,331 @@ fun AllAppsTab(c: SchemeColors, apps: List<AppUsage>, onRefresh: () -> Unit) {
         }
     }
 }
+@Composable
+fun AppDetailScreen(
+    c: SchemeColors,
+    app: AppUsage,
+    onBack: () -> Unit
+) {
 
+    BackHandler {
+        onBack()
+    }
+
+    val peakHour = app.hourlyMinutes.indices.maxByOrNull {
+        app.hourlyMinutes[it]
+    } ?: 0
+
+    val totalHourly = app.hourlyMinutes.sum().coerceAtLeast(1)
+
+    val focusScore = when {
+        app.shortSessionCount <= 3 && app.avgSessionMinutes >= 10 -> 90
+        app.shortSessionCount <= 6 -> 75
+        app.shortSessionCount <= 12 -> 55
+        else -> 30
+    }
+
+    val nightMinutes =
+        app.hourlyMinutes.slice(0..5).sum() +
+        app.hourlyMinutes.slice(22..23).sum()
+
+    LazyColumn(
+        Modifier
+            .fillMaxSize()
+            .background(c.bg),
+        contentPadding = PaddingValues(bottom = 32.dp)
+    ) {
+
+        item {
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 52.dp)
+            ) {
+
+                Text(
+                    "← Back",
+                    color = c.accent,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable { onBack() }
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    app.label,
+                    color = c.text,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Light
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    app.category,
+                    color = c.accentDim,
+                    fontSize = 13.sp
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                HLine(c)
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    fmt(app.todayMinutes),
+                    color = c.accent,
+                    fontSize = 56.sp,
+                    fontWeight = FontWeight.Light
+                )
+
+                Text(
+                    "today",
+                    color = c.text3,
+                    fontSize = 11.sp
+                )
+
+                Spacer(Modifier.height(28.dp))
+            }
+        }
+
+        item {
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+
+                InsightCard(
+                    c,
+                    "Unlocks",
+                    "${app.unlockCount}×",
+                    "times opened",
+                    Modifier.weight(1f)
+                )
+
+                InsightCard(
+                    c,
+                    "Sessions",
+                    "${app.sessionCount}",
+                    "today",
+                    Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+
+                InsightCard(
+                    c,
+                    "Average",
+                    fmt(app.avgSessionMinutes),
+                    "per session",
+                    Modifier.weight(1f)
+                )
+
+                InsightCard(
+                    c,
+                    "Longest",
+                    fmt(app.longestSessionMinutes),
+                    "single session",
+                    Modifier.weight(1f)
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+
+        item {
+
+            Column(Modifier.padding(horizontal = 28.dp)) {
+
+                SectionLabel(
+                    c,
+                    "USAGE DISTRIBUTION",
+                    "hour-by-hour activity"
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(c.surface)
+                        .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                        .padding(14.dp)
+                ) {
+
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+
+                        val maxHour =
+                            app.hourlyMinutes.maxOrNull()?.coerceAtLeast(1) ?: 1
+
+                        app.hourlyMinutes.forEach { minute ->
+
+                            val frac =
+                                (minute.toFloat() / maxHour).coerceIn(0.04f, 1f)
+
+                            val anim by animateFloatAsState(
+                                frac,
+                                tween(400, easing = EaseOutCubic)
+                            )
+
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(anim)
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = 2.dp,
+                                            topEnd = 2.dp
+                                        )
+                                    )
+                                    .background(
+                                        if (minute > 0)
+                                            c.accent
+                                        else
+                                            c.border2
+                                    )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+
+        item {
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(c.surface)
+                    .border(1.dp, c.border, RoundedCornerShape(12.dp))
+                    .padding(vertical = 18.dp)
+            ) {
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+
+                    MetricCell(
+                        c,
+                        "PEAK",
+                        "${peakHour}:00",
+                        "${app.hourlyMinutes[peakHour]}m"
+                    )
+
+                    VDiv(c)
+
+                    MetricCell(
+                        c,
+                        "FOCUS",
+                        "$focusScore",
+                        "quality score"
+                    )
+
+                    VDiv(c)
+
+                    MetricCell(
+                        c,
+                        "NIGHT",
+                        fmt(nightMinutes.toLong()),
+                        "late usage"
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+
+        item {
+
+            Column(Modifier.padding(horizontal = 28.dp)) {
+
+                SectionLabel(
+                    c,
+                    "TOTALS",
+                    "all recorded history"
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(c.surface)
+                        .border(1.dp, c.border, RoundedCornerShape(12.dp))
+                        .padding(18.dp)
+                ) {
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+
+                        DetailRow(c, "Today", fmt(app.todayMinutes))
+                        DetailRow(c, "This week", fmt(app.weekMinutes))
+                        DetailRow(c, "This month", fmt(app.monthMinutes))
+                        DetailRow(c, "Lifetime", fmt(app.lifetimeMinutes))
+                        DetailRow(c, "First recorded", fmtDate(app.firstSeen))
+                        DetailRow(c, "Short sessions", "${app.shortSessionCount}")
+                    }
+                }
+
+                Spacer(Modifier.height(28.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailRow(
+    c: SchemeColors,
+    label: String,
+    value: String
+) {
+
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+
+        Text(
+            label,
+            color = c.text3,
+            fontSize = 12.sp
+        )
+
+        Text(
+            value,
+            color = c.text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
 // ═══════════════════════════════════════════════════════════════
 // THEME TAB
 // ═══════════════════════════════════════════════════════════════
@@ -1517,7 +1949,68 @@ fun InsightCard(c: SchemeColors, label: String, value: String, sub: String,
         Text(sub, color=c.text3, fontSize=9.sp)
     }
 }
+@Composable
+fun ScreenHeader(
+    c: SchemeColors,
+    title: String,
+    subtitle: String,
+    onRefresh: () -> Unit
+) {
 
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 28.dp, vertical = 52.dp)
+    ) {
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+
+            Column {
+
+                Text(
+                    title,
+                    color = c.text,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Light
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    subtitle,
+                    color = c.text3,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.sp
+                )
+            }
+
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(c.surface)
+                    .border(
+                        1.dp,
+                        c.border,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .clickable { onRefresh() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+
+                Text(
+                    "Refresh",
+                    color = c.accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
 @Composable
 fun SummaryCard(c: SchemeColors, label: String, value: String, sub: String,
                 modifier: Modifier = Modifier) {
