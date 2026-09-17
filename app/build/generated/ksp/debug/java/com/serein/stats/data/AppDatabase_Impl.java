@@ -28,23 +28,27 @@ import javax.annotation.processing.Generated;
 public final class AppDatabase_Impl extends AppDatabase {
   private volatile UsageSessionDao _usageSessionDao;
 
+  private volatile DailyUsageDao _dailyUsageDao;
+
   private volatile AppLimitDao _appLimitDao;
 
   @Override
   @NonNull
   protected SupportSQLiteOpenHelper createOpenHelper(@NonNull final DatabaseConfiguration config) {
-    final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(1) {
+    final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(2) {
       @Override
       public void createAllTables(@NonNull final SupportSQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `usage_sessions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `packageName` TEXT NOT NULL, `appLabel` TEXT NOT NULL, `date` TEXT NOT NULL, `durationMinutes` INTEGER NOT NULL, `recordedAt` INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS `daily_usage` (`date` TEXT NOT NULL, `packageName` TEXT NOT NULL, `appLabel` TEXT NOT NULL, `durationMinutes` INTEGER NOT NULL, `recordedAt` INTEGER NOT NULL, PRIMARY KEY(`date`, `packageName`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS `app_limits` (`packageName` TEXT NOT NULL, `appLabel` TEXT NOT NULL, `dailyLimitMinutes` INTEGER NOT NULL, PRIMARY KEY(`packageName`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)");
-        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '38653ded5b6f831101d44dad89e73957')");
+        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7191c6a25e9d1ad54695f84723cbf80e')");
       }
 
       @Override
       public void dropAllTables(@NonNull final SupportSQLiteDatabase db) {
         db.execSQL("DROP TABLE IF EXISTS `usage_sessions`");
+        db.execSQL("DROP TABLE IF EXISTS `daily_usage`");
         db.execSQL("DROP TABLE IF EXISTS `app_limits`");
         final List<? extends RoomDatabase.Callback> _callbacks = mCallbacks;
         if (_callbacks != null) {
@@ -105,6 +109,21 @@ public final class AppDatabase_Impl extends AppDatabase {
                   + " Expected:\n" + _infoUsageSessions + "\n"
                   + " Found:\n" + _existingUsageSessions);
         }
+        final HashMap<String, TableInfo.Column> _columnsDailyUsage = new HashMap<String, TableInfo.Column>(5);
+        _columnsDailyUsage.put("date", new TableInfo.Column("date", "TEXT", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsDailyUsage.put("packageName", new TableInfo.Column("packageName", "TEXT", true, 2, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsDailyUsage.put("appLabel", new TableInfo.Column("appLabel", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsDailyUsage.put("durationMinutes", new TableInfo.Column("durationMinutes", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsDailyUsage.put("recordedAt", new TableInfo.Column("recordedAt", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final HashSet<TableInfo.ForeignKey> _foreignKeysDailyUsage = new HashSet<TableInfo.ForeignKey>(0);
+        final HashSet<TableInfo.Index> _indicesDailyUsage = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoDailyUsage = new TableInfo("daily_usage", _columnsDailyUsage, _foreignKeysDailyUsage, _indicesDailyUsage);
+        final TableInfo _existingDailyUsage = TableInfo.read(db, "daily_usage");
+        if (!_infoDailyUsage.equals(_existingDailyUsage)) {
+          return new RoomOpenHelper.ValidationResult(false, "daily_usage(com.serein.stats.data.DailyUsage).\n"
+                  + " Expected:\n" + _infoDailyUsage + "\n"
+                  + " Found:\n" + _existingDailyUsage);
+        }
         final HashMap<String, TableInfo.Column> _columnsAppLimits = new HashMap<String, TableInfo.Column>(3);
         _columnsAppLimits.put("packageName", new TableInfo.Column("packageName", "TEXT", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsAppLimits.put("appLabel", new TableInfo.Column("appLabel", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
@@ -120,7 +139,7 @@ public final class AppDatabase_Impl extends AppDatabase {
         }
         return new RoomOpenHelper.ValidationResult(true, null);
       }
-    }, "38653ded5b6f831101d44dad89e73957", "adcf54dcef2ca7decf1aecc029ae88b9");
+    }, "7191c6a25e9d1ad54695f84723cbf80e", "55e0825da7343ac2555716d2bdf75730");
     final SupportSQLiteOpenHelper.Configuration _sqliteConfig = SupportSQLiteOpenHelper.Configuration.builder(config.context).name(config.name).callback(_openCallback).build();
     final SupportSQLiteOpenHelper _helper = config.sqliteOpenHelperFactory.create(_sqliteConfig);
     return _helper;
@@ -131,7 +150,7 @@ public final class AppDatabase_Impl extends AppDatabase {
   protected InvalidationTracker createInvalidationTracker() {
     final HashMap<String, String> _shadowTablesMap = new HashMap<String, String>(0);
     final HashMap<String, Set<String>> _viewTables = new HashMap<String, Set<String>>(0);
-    return new InvalidationTracker(this, _shadowTablesMap, _viewTables, "usage_sessions","app_limits");
+    return new InvalidationTracker(this, _shadowTablesMap, _viewTables, "usage_sessions","daily_usage","app_limits");
   }
 
   @Override
@@ -141,6 +160,7 @@ public final class AppDatabase_Impl extends AppDatabase {
     try {
       super.beginTransaction();
       _db.execSQL("DELETE FROM `usage_sessions`");
+      _db.execSQL("DELETE FROM `daily_usage`");
       _db.execSQL("DELETE FROM `app_limits`");
       super.setTransactionSuccessful();
     } finally {
@@ -157,6 +177,7 @@ public final class AppDatabase_Impl extends AppDatabase {
   protected Map<Class<?>, List<Class<?>>> getRequiredTypeConverters() {
     final HashMap<Class<?>, List<Class<?>>> _typeConvertersMap = new HashMap<Class<?>, List<Class<?>>>();
     _typeConvertersMap.put(UsageSessionDao.class, UsageSessionDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(DailyUsageDao.class, DailyUsageDao_Impl.getRequiredConverters());
     _typeConvertersMap.put(AppLimitDao.class, AppLimitDao_Impl.getRequiredConverters());
     return _typeConvertersMap;
   }
@@ -186,6 +207,20 @@ public final class AppDatabase_Impl extends AppDatabase {
           _usageSessionDao = new UsageSessionDao_Impl(this);
         }
         return _usageSessionDao;
+      }
+    }
+  }
+
+  @Override
+  public DailyUsageDao dailyUsageDao() {
+    if (_dailyUsageDao != null) {
+      return _dailyUsageDao;
+    } else {
+      synchronized(this) {
+        if(_dailyUsageDao == null) {
+          _dailyUsageDao = new DailyUsageDao_Impl(this);
+        }
+        return _dailyUsageDao;
       }
     }
   }

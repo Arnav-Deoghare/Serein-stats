@@ -21,6 +21,9 @@ __MACOSX/
 *.jar
 *.aar
 *.ap_
+*.bin
+bin/
+out/
 
 # ── Signing keys (NEVER commit these) ────────────────────────
 *.jks
@@ -41,6 +44,12 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# ── Temp files ───────────────────────────────────────────────
+*.tmp
+*.temp
+tmp/
+temp/
 
 # ── VSCode ───────────────────────────────────────────────────
 .vscode/
