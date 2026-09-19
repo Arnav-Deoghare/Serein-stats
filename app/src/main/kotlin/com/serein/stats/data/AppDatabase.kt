@@ -51,6 +51,9 @@ interface UsageSessionDao {
     suspend fun deleteOlderThan(before: String)
 }
 
+/** One package's summed usage across every day ever recorded locally. */
+data class PackageLifetimeTotal(val packageName: String, val totalMinutes: Long)
+
 @Dao
 interface DailyUsageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -61,6 +64,10 @@ interface DailyUsageDao {
 
     @Query("SELECT * FROM daily_usage WHERE date >= :from ORDER BY date ASC")
     suspend fun getFromOnce(from: String): List<DailyUsage>
+
+    /** Full-history total per app. This never expires — it's summed over the entire local archive. */
+    @Query("SELECT packageName, SUM(durationMinutes) AS totalMinutes FROM daily_usage GROUP BY packageName")
+    suspend fun getLifetimeTotals(): List<PackageLifetimeTotal>
 }
 
 @Dao

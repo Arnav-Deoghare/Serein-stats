@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.widget.ImageView
 import com.serein.stats.data.AppDatabase
 import com.serein.stats.data.DailyUsage
+import com.serein.stats.worker.DailySnapshotWorker
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -194,6 +195,15 @@ object UsageHelper {
         set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0)
         if (offset != 0) add(Calendar.DAY_OF_YEAR, offset)
     }.timeInMillis
+
+    /** Midnight on the Monday of the current week, plus/minus `weekOffset` whole weeks. */
+    private fun startOfWeek(weekOffset: Int = 0) = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0)
+        set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0)
+        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) + 5) % 7 // Mon=0 ... Sun=6
+        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
+        if (weekOffset != 0) add(Calendar.DAY_OF_YEAR, weekOffset * 7)
+    }.timeInMillis
     suspend fun getPhoneUnlockCount(ctx: Context): Int =
         withContext(Dispatchers.IO) {
 
@@ -249,12 +259,17 @@ object UsageHelper {
 
         val todayMap = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startOfDay(), now)
             ?.filter { !shouldFilter(it.packageName) }?.associateBy { it.packageName } ?: emptyMap()
-        val weekMap  = usm.queryUsageStats(UsageStatsManager.INTERVAL_WEEKLY, startOfDay(-6), now)
+        val weekMap  = usm.queryUsageStats(UsageStatsManager.INTERVAL_WEEKLY, startOfWeek(), now)
             ?.filter { !shouldFilter(it.packageName) }?.associateBy { it.packageName } ?: emptyMap()
         val monthMap = usm.queryUsageStats(UsageStatsManager.INTERVAL_MONTHLY, startOfDay(-29), now)
             ?.filter { !shouldFilter(it.packageName) }?.associateBy { it.packageName } ?: emptyMap()
         val lifeMap  = usm.queryUsageStats(UsageStatsManager.INTERVAL_YEARLY, startOfDay(-1460), now)
             ?.filter { !shouldFilter(it.packageName) }?.associateBy { it.packageName } ?: emptyMap()
+
+        // Android itself prunes UsageStatsManager history (aggressively on some OEMs).
+        // The local daily_usage archive never expires, so it's the real floor for "lifetime" totals.
+        val localLifetimeMap = AppDatabase.get(ctx).dailyUsageDao()
+            .getLifetimeTotals().associate { it.packageName to it.totalMinutes }
 
         val hourly       = mutableMapOf<String, IntArray>()
         val unlocks      = mutableMapOf<String, Int>()
@@ -320,7 +335,7 @@ object UsageHelper {
                 todayMinutes         = stat.totalTimeInForeground / 60_000,
                 weekMinutes          = (weekMap[pkg]?.totalTimeInForeground ?: 0L) / 60_000,
                 monthMinutes         = (monthMap[pkg]?.totalTimeInForeground ?: 0L) / 60_000,
-                lifetimeMinutes      = (lifeMap[pkg]?.totalTimeInForeground ?: 0L) / 60_000,
+                lifetimeMinutes      = maxOf((lifeMap[pkg]?.totalTimeInForeground ?: 0L) / 60_000, localLifetimeMap[pkg] ?: 0L),
                 category             = getCategory(pkg),
                 unlockCount          = unlocks[pkg] ?: 0,
                 sessionCount         = sess.size.coerceAtLeast(1),
@@ -438,9 +453,8 @@ object UsageHelper {
     // Week-over-week comparison
     suspend fun getLastWeekTotal(ctx: Context): Long = withContext(Dispatchers.IO) {
         val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val now = System.currentTimeMillis()
-        val lastWeekStart = startOfDay(-13)
-        val lastWeekEnd   = startOfDay(-7)
+        val lastWeekStart = startOfWeek(weekOffset = -1)
+        val lastWeekEnd   = startOfWeek()
         usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, lastWeekStart, lastWeekEnd)
             ?.filter { !shouldFilter(it.packageName) }
             ?.sumOf { it.totalTimeInForeground } ?.div(60_000) ?: 0L
@@ -486,6 +500,7 @@ fun Context.saveColorScheme(s: ColorScheme) =
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DailySnapshotWorker.schedule(applicationContext)
         setContent { SereinApp() }
     }
 }
@@ -835,11 +850,17 @@ fun TodayTab(
         if (gapMin > 60) "${gapMin/60}h ${gapMin%60}m" else "${gapMin}m"
     } else "—"
 
-    // Chronological order puts prior weeks to the left of the current week.
-    // The list opens on the last card (the current week).
-    // Build backwards from today so the current card always contains seven days,
-    // even when the retained history length is not divisible by seven.
-    val weeks = days.reversed().chunked(7).map { it.reversed() }.reversed()
+    // Group into real calendar weeks (Monday–Sunday), not just trailing chunks of 7.
+    // The first card may hold fewer than 7 days if the retained history starts
+    // mid-week; the list opens on the last card (the current week).
+    val weeks = days.groupBy { d ->
+        Calendar.getInstance().apply {
+            timeInMillis = d.startMillis
+            set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0)
+            val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) + 5) % 7 // Mon=0 ... Sun=6
+            add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
+        }.timeInMillis
+    }.toSortedMap().values.toList()
     val weekListState = rememberLazyListState()
     LaunchedEffect(weeks.size) {
         if (weeks.isNotEmpty()) weekListState.scrollToItem(weeks.lastIndex)
@@ -950,6 +971,8 @@ fun TodayTab(
                     val weekTotal = week.sumOf { it.minutes }
                     val weekOfYear = Calendar.getInstance().apply {
                         timeInMillis = week.last().startMillis
+                        firstDayOfWeek = Calendar.MONDAY
+                        minimalDaysInFirstWeek = 4
                     }.get(Calendar.WEEK_OF_YEAR)
                     Box(Modifier.width(304.dp).clip(RoundedCornerShape(12.dp)).background(c.surface)
                         .border(1.dp, c.border, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp)) {
@@ -960,7 +983,7 @@ fun TodayTab(
                                 Text(fmt(weekTotal) + " total", color = c.accentDim, fontSize = 9.sp)
                             }
                             Spacer(Modifier.height(10.dp))
-                            Row(Modifier.fillMaxWidth().height(52.dp),
+                            Row(Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 verticalAlignment = Alignment.Bottom) {
                                 week.forEachIndexed { i, d ->
@@ -1287,7 +1310,13 @@ fun TrendsTab(
     onRefresh: () -> Unit,
     showHeader: Boolean = true
 ){
-    val totalWeek  = days.takeLast(7).sumOf { it.minutes }
+    // This week = since the most recent Monday, not just the last 7 calendar days.
+    val mondayThisWeek = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0)
+        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) + 5) % 7 // Mon=0 ... Sun=6
+        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
+    }.timeInMillis
+    val totalWeek  = days.filter { it.startMillis >= mondayThisWeek }.sumOf { it.minutes }
     val totalMonth = days.sumOf { it.minutes }
     val avg7       = if(days.size>=7) days.takeLast(7).dropLast(1).map{it.minutes}.average().toLong() else 0L
     val avg30      = days.map { it.minutes }.average().toLong()
@@ -1302,17 +1331,17 @@ fun TrendsTab(
     val weekDeltaSign = if (weekDelta >= 0) "↑" else "↓"
     val weekDeltaCol  = if (weekDelta > 30) c.red else if (weekDelta < -30) c.green else c.text3
 
-    // Day-of-week pattern
+    // Day-of-week pattern (index 0 = Monday ... 6 = Sunday)
     val dowTotals = Array(7) { 0L }
     val dowCounts = Array(7) { 0 }
     days.forEach { d ->
         val cal = Calendar.getInstance()
         cal.time = SimpleDateFormat("d MMM", Locale.getDefault()).parse(d.date) ?: return@forEach
-        val dow = cal.get(Calendar.DAY_OF_WEEK) - 1
+        val dow = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 // Calendar.SUNDAY=1..SATURDAY=7 → Mon=0..Sun=6
         dowTotals[dow] += d.minutes; dowCounts[dow]++
     }
     val dowAvg    = Array(7) { i -> if (dowCounts[i]>0) dowTotals[i]/dowCounts[i] else 0L }
-    val dowLabels = listOf("Su","Mo","Tu","We","Th","Fr","Sa")
+    val dowLabels = listOf("Mo","Tu","We","Th","Fr","Sa","Su")
     val maxDow    = dowAvg.maxOrNull()?.coerceAtLeast(1) ?: 1L
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding=PaddingValues(bottom=32.dp)) {
@@ -1418,7 +1447,7 @@ fun TrendsTab(
                     .border(1.dp,c.border,RoundedCornerShape(14.dp))
                     .padding(14.dp)) {
                     Column {
-                        Row(Modifier.fillMaxWidth().height(64.dp),
+                        Row(Modifier.fillMaxWidth(),
                             horizontalArrangement=Arrangement.spacedBy(6.dp),
                             verticalAlignment=Alignment.Bottom) {
                             dowAvg.forEachIndexed { i, avg ->
