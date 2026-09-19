@@ -6,6 +6,7 @@ build/
 # ── Local config (machine-specific, never commit) ─────────────
 local.properties
 *.local.properties
+keystore.properties
 
 # ── Android Studio / IntelliJ ─────────────────────────────────
 .idea/
