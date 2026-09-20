@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for Android < 12 (API < 31), referenced via android:fullBackupContent.
+  Only the usage-history database is backed up — nothing else Serein stores is
+  worth restoring (in-memory state, caches).
+-->
+<full-backup-content>
+    <include domain="database" path="serein.db"/>
+    <include domain="database" path="serein.db-wal"/>
+    <include domain="database" path="serein.db-shm"/>
+</full-backup-content>
