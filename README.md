@@ -4,6 +4,19 @@ A native Android screen-time and usage-analytics app, built with Kotlin and Jetp
 
 Serein is designed as a companion to **Zen Launcher**, syncing app-limit state via broadcast intents.
 
+All usage data stays on your device — no accounts, no servers. See [PRIVACY.md](PRIVACY.md).
+
+## Install
+
+Serein isn't on the Play Store yet — grab the signed APK directly from [Releases](https://github.com/Arnav-Deoghare/Serein-stats/releases/latest):
+
+1. Download `app-release.apk` from the latest release
+2. Android will likely block the install at first since it's from outside the Play Store — when prompted, go to **Settings → allow installs from this source** (the exact wording depends on whether you downloaded it via Chrome, Files, etc.) and try installing again
+3. Open Serein — it'll ask for the **Usage Access** permission, since that's how it reads app usage stats. Grant it under **Settings → Usage access → Serein**, then return to the app
+4. That's it — Serein starts tracking from that point on
+
+Every release is signed with the same key, so future updates install cleanly over old ones without needing to uninstall first.
+
 ## Features
 
 - **Today / Stats / Trends / Heat / All Apps** tabs covering usage from a single day up to lifetime totals
@@ -48,7 +61,7 @@ app/src/main/kotlin/com/serein/stats/
 
 ## CI
 
-`.github/workflows/build.yml` builds a debug APK on every push/PR to `main` and, on `main`, publishes it as a prerelease GitHub Release.
+`.github/workflows/release.yml` builds a signed release APK and publishes it as a GitHub Release whenever a version tag (`v*`) is pushed.
 
 ## License
 

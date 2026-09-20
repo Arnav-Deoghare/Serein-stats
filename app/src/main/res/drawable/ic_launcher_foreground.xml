@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Serein launcher mark: five solid circles, the outermost centered on the
+  icon, each successive circle smaller and drifting toward the same corner,
+  darkening as they converge — time -> focus -> inward.
+  Max bounding extent from center (54,54) is the outer circle's own radius,
+  26dp, safely inside the 33dp-radius adaptive-icon safe zone.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:fillColor="#9FE1CB" android:pathData="M54,54
+        m -26,0
+        a 26,26 0 1,0 52,0
+        a 26,26 0 1,0 -52,0"/>
+
+    <path android:fillColor="#5DCAA5" android:pathData="M56.2,56.2
+        m -20.8,0
+        a 20.8,20.8 0 1,0 41.6,0
+        a 20.8,20.8 0 1,0 -41.6,0"/>
+
+    <path android:fillColor="#1D9E75" android:pathData="M58.4,58.4
+        m -15.6,0
+        a 15.6,15.6 0 1,0 31.2,0
+        a 15.6,15.6 0 1,0 -31.2,0"/>
+
+    <path android:fillColor="#0F6E56" android:pathData="M60.6,60.6
+        m -10.4,0
+        a 10.4,10.4 0 1,0 20.8,0
+        a 10.4,10.4 0 1,0 -20.8,0"/>
+
+    <path android:fillColor="#085041" android:pathData="M62.8,62.8
+        m -5.2,0
+        a 5.2,5.2 0 1,0 10.4,0
+        a 5.2,5.2 0 1,0 -10.4,0"/>
+
+</vector>

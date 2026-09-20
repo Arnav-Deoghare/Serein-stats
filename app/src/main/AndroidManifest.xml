@@ -13,20 +13,74 @@
 
     <application
         android:label="Serein"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Serein"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules">
 
-        <!-- Main stats screen -->
+        <!-- Main stats screen. Launched exclusively via the activity-aliases
+             below, so its own icon can change with the selected color scheme -->
         <activity
             android:name=".ui.MainActivity"
-            android:exported="true">
+            android:exported="true"/>
+
+        <!-- One alias per color scheme; exactly one is enabled at a time
+             (switched in Kotlin via PackageManager.setComponentEnabledSetting
+             whenever the user picks a different scheme). TAN starts enabled
+             here to match the app's own default scheme on first install. -->
+        <activity-alias
+            android:name=".LauncherTan"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_tan"
+            android:roundIcon="@mipmap/ic_launcher_tan_round"
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherPaper"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_paper"
+            android:roundIcon="@mipmap/ic_launcher_paper_round"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherSlate"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_slate"
+            android:roundIcon="@mipmap/ic_launcher_slate_round"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LauncherForest"
+            android:targetActivity=".ui.MainActivity"
+            android:icon="@mipmap/ic_launcher_forest"
+            android:roundIcon="@mipmap/ic_launcher_forest_round"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
 
         <!-- Receives limit-hit broadcasts FROM Zen Launcher -->
         <receiver

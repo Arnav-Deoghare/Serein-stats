@@ -4,7 +4,10 @@ import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.ImageView
@@ -33,6 +36,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -187,8 +193,20 @@ object UsageHelper {
         return ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,
             android.os.Process.myUid(), ctx.packageName) == AppOpsManager.MODE_ALLOWED
     }
-    fun openPermissionSettings(ctx: Context) =
-        ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+    fun openPermissionSettings(ctx: Context) {
+        try {
+            ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        } catch (e: Exception) {
+            // Some OEMs/ROMs don't resolve this screen; fall back to the app's
+            // own settings page rather than crashing on someone's first launch.
+            try {
+                ctx.startActivity(Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${ctx.packageName}")
+                ))
+            } catch (e2: Exception) { /* nothing more we can do */ }
+        }
+    }
 
     private fun startOfDay(offset: Int = 0) = Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0)
@@ -490,8 +508,61 @@ fun AppIcon(packageName: String, label: String, c: SchemeColors, modifier: Modif
 fun Context.getPrefs() = getSharedPreferences("serein_prefs", Context.MODE_PRIVATE)
 fun Context.getColorScheme(): ColorScheme =
     ColorScheme.valueOf(getPrefs().getString("color_scheme", ColorScheme.TAN.name)!!)
-fun Context.saveColorScheme(s: ColorScheme) =
-    getPrefs().edit().putString("color_scheme", s.name).apply()
+fun Context.saveColorScheme(s: ColorScheme) {
+    getPrefs()
+        .edit()
+        .putString("color_scheme", s.name)
+        .apply()
+}
+private val schemeAliasSuffix = mapOf(
+    ColorScheme.TAN to "Tan",
+    ColorScheme.PAPER to "Paper",
+    ColorScheme.SLATE to "Slate",
+    ColorScheme.FOREST to "Forest",
+)
+
+/** Enables the launcher-icon activity-alias matching [scheme] and disables the other three. */
+fun Context.applyLauncherIconFor(scheme: ColorScheme) {
+    val pm = packageManager
+
+    val selectedSuffix = schemeAliasSuffix[scheme] ?: return
+    val selectedAlias = ComponentName(
+        packageName,
+        "com.serein.stats.Launcher$selectedSuffix"
+    )
+
+    // 1. Enable the new icon FIRST.
+    try {
+        pm.setComponentEnabledSetting(
+            selectedAlias,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return
+    }
+
+    // 2. Only then disable the other icons.
+    schemeAliasSuffix
+        .filterKeys { it != scheme }
+        .forEach { (_, suffix) ->
+            try {
+                val alias = ComponentName(
+                    packageName,
+                    "com.serein.stats.Launcher$suffix"
+                )
+
+                pm.setComponentEnabledSetting(
+                    alias,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // ACTIVITY
@@ -529,7 +600,24 @@ fun SplashScreen(c: SchemeColors, onDone: () -> Unit) {
                     .border(1.dp, c.accentDim.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("S", color = c.accent, fontSize = 28.sp, fontWeight = FontWeight.Thin)
+                // Same mark as the launcher icon, recolored from the active theme:
+                // five circles, shrinking and drifting inward, darkening as they converge.
+                val ring0 = lerp(c.accent, Color.White, 0.55f)
+                val ring1 = lerp(c.accent, Color.White, 0.28f)
+                val ring2 = c.accent
+                val ring3 = c.accentDim
+                val ring4 = lerp(c.accentDim, Color.Black, 0.35f)
+                Canvas(Modifier.size(40.dp)) {
+                    val w = size.minDimension
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    fun ringOffset(n: Int) = w * 0.02037f * n
+                    drawCircle(ring0, radius = w * 0.2407f, center = Offset(cx, cy))
+                    drawCircle(ring1, radius = w * 0.1926f, center = Offset(cx + ringOffset(1), cy + ringOffset(1)))
+                    drawCircle(ring2, radius = w * 0.1444f, center = Offset(cx + ringOffset(2), cy + ringOffset(2)))
+                    drawCircle(ring3, radius = w * 0.0963f, center = Offset(cx + ringOffset(3), cy + ringOffset(3)))
+                    drawCircle(ring4, radius = w * 0.0482f, center = Offset(cx + ringOffset(4), cy + ringOffset(4)))
+                }
             }
             Spacer(Modifier.height(18.dp))
             Text("SEREIN", color = c.accent, fontSize = 13.sp,
@@ -551,6 +639,10 @@ fun SereinApp() {
     var hasPerm    by remember { mutableStateOf(UsageHelper.hasPermission(ctx)) }
     var showSplash by remember { mutableStateOf(true) }
     val c = scheme.colors()
+
+    // Safety net: keep the launcher icon in sync with the saved scheme even if
+    // the component-enabled state ever drifts (e.g. after an app update).
+    //LaunchedEffect(Unit) { ctx.applyLauncherIconFor(scheme) }
 
     when {
         showSplash -> SplashScreen(c) { showSplash = false }
@@ -646,16 +738,23 @@ fun MainNav(c: SchemeColors, scheme: ColorScheme, onSchemeChange: (ColorScheme) 
     var refreshKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(refreshKey) {
-    phoneUnlocks = UsageHelper.getPhoneUnlockCount(ctx)
+    phoneUnlocks = try { UsageHelper.getPhoneUnlockCount(ctx) } catch (e: CancellationException) { throw e } catch (e: Exception) { 0 }
     while (true) {
 
         loading = true
 
-        apps = UsageHelper.getApps(ctx)
-        UsageHelper.persistTodaySnapshot(ctx, apps)
-        days = UsageHelper.getDays(ctx, 365)
-        unlockBounds = UsageHelper.getTodayUnlockBounds(ctx)
-        lastWeekTotal = UsageHelper.getLastWeekTotal(ctx)
+        try {
+            apps = UsageHelper.getApps(ctx)
+            UsageHelper.persistTodaySnapshot(ctx, apps)
+            days = UsageHelper.getDays(ctx, 365)
+            unlockBounds = UsageHelper.getTodayUnlockBounds(ctx)
+            lastWeekTotal = UsageHelper.getLastWeekTotal(ctx)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Keep whatever was last loaded rather than crashing the whole app;
+            // just retry on the next cycle.
+        }
 
         loading = false
 
@@ -812,8 +911,12 @@ fun TodayTab(
         if (selected != days.lastOrNull()) {
             historicalApps = emptyList()
             historicalUnlocks = null
-            historicalApps = UsageHelper.getAppsForDay(ctx, selected.startMillis)
-            historicalUnlocks = UsageHelper.getUnlockCountForDay(ctx, selected.startMillis)
+            try {
+                historicalApps = UsageHelper.getAppsForDay(ctx, selected.startMillis)
+                historicalUnlocks = UsageHelper.getUnlockCountForDay(ctx, selected.startMillis)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) { /* leave defaults, don't crash */ }
         }
     }
 
@@ -1150,7 +1253,7 @@ fun DayDetailScreen(c: SchemeColors, day: DaySummary, onBack: () -> Unit) {
 
     BackHandler { onBack() }
     LaunchedEffect(day.startMillis) {
-        unlocks = UsageHelper.getUnlockCountForDay(ctx, day.startMillis)
+        unlocks = try { UsageHelper.getUnlockCountForDay(ctx, day.startMillis) } catch (e: CancellationException) { throw e } catch (e: Exception) { 0 }
     }
 
     if (expanded) {
@@ -1207,7 +1310,7 @@ fun ExpandedDayDetailScreen(
 
     BackHandler { onBack() }
     LaunchedEffect(day.startMillis) {
-        apps = UsageHelper.getAppsForDay(ctx, day.startMillis)
+        apps = try { UsageHelper.getAppsForDay(ctx, day.startMillis) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
         loading = false
     }
 
@@ -1786,7 +1889,7 @@ fun AppDetailScreen(
     val timeframeLabels = listOf("Day", "Week", "Month", "Year")
     val dayCounts = listOf(1, 7, 30, 365)
     LaunchedEffect(timeframe, app.packageName) {
-        trend = UsageHelper.getAppUsageDays(ctx, app.packageName, dayCounts[timeframe])
+        trend = try { UsageHelper.getAppUsageDays(ctx, app.packageName, dayCounts[timeframe]) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
     }
     val periodTotal = if (trend.isNotEmpty()) trend.sum() else when (timeframe) {
         0 -> app.todayMinutes; 1 -> app.weekMinutes; 2 -> app.monthMinutes; else -> app.lifetimeMinutes
