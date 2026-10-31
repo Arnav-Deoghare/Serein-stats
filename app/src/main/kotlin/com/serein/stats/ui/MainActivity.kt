@@ -467,16 +467,6 @@ object UsageHelper {
                 ?.firstOrNull { it.packageName == packageName }?.totalTimeInForeground?.div(60_000) ?: 0L
         }
     }
-
-    // Week-over-week comparison
-    suspend fun getLastWeekTotal(ctx: Context): Long = withContext(Dispatchers.IO) {
-        val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val lastWeekStart = startOfWeek(weekOffset = -1)
-        val lastWeekEnd   = startOfWeek()
-        usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, lastWeekStart, lastWeekEnd)
-            ?.filter { !shouldFilter(it.packageName) }
-            ?.sumOf { it.totalTimeInForeground } ?.div(60_000) ?: 0L
-    }
 }
 
 fun fmt(m: Long): String = when { m <= 0 -> "—"; m < 60 -> "${m}m"; else -> "${m/60}h ${m%60}m" }
@@ -728,7 +718,6 @@ fun MainNav(c: SchemeColors, scheme: ColorScheme, onSchemeChange: (ColorScheme) 
     var days by remember { mutableStateOf<List<DaySummary>>(emptyList()) }
     var phoneUnlocks by remember { mutableStateOf(0) }
     var unlockBounds by remember { mutableStateOf<Pair<Long?,Long?>>(Pair(null,null)) }
-    var lastWeekTotal by remember { mutableStateOf(0L) }
     var loading by remember { mutableStateOf(true) }
 
     // NEW
@@ -748,7 +737,6 @@ fun MainNav(c: SchemeColors, scheme: ColorScheme, onSchemeChange: (ColorScheme) 
             UsageHelper.persistTodaySnapshot(ctx, apps)
             days = UsageHelper.getDays(ctx, 365)
             unlockBounds = UsageHelper.getTodayUnlockBounds(ctx)
-            lastWeekTotal = UsageHelper.getLastWeekTotal(ctx)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -786,7 +774,7 @@ fun MainNav(c: SchemeColors, scheme: ColorScheme, onSchemeChange: (ColorScheme) 
 
     // Keep navigation intentionally small. Deeper analytics live within Stats,
     // so the home experience stays calm rather than feeling like a data tool.
-    val navItems = listOf("Today", "Stats", "Settings")
+    val navItems = listOf("Today", "Settings")
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         Box(Modifier.fillMaxSize().padding(bottom = 64.dp)) {
@@ -816,17 +804,7 @@ fun MainNav(c: SchemeColors, scheme: ColorScheme, onSchemeChange: (ColorScheme) 
                         onOpenApp = { selectedApp = it },
                         onOpenDay = { selectedDay = it }
                     )
-                    1 -> StatsTab(
-                        c,
-                        scheme,
-                        days.takeLast(30),
-                        apps,
-                        lastWeekTotal,
-                        { refreshKey++ },
-                        onOpenApp = { selectedApp = it }
-                    )
-
-                    2 -> SettingsTab(c, scheme, onSchemeChange)
+                    1 -> SettingsTab(c, scheme, onSchemeChange)
                 }
             }
         }
@@ -927,7 +905,6 @@ fun TodayTab(
     }
     val total       = if (viewingToday) apps.sumOf { it.todayMinutes } else (selectedDay?.minutes ?: 0L)
     val unlocks = if (viewingToday) phoneUnlocks else historicalUnlocks ?: 0
-    val sessions    = displayApps.sumOf { it.sessionCount }
     val deepSess    = displayApps.sumOf { app -> app.hourlyMinutes.count { it >= 10 }.toLong() }
     val avg7        = if (days.size>=7) days.takeLast(7).dropLast(1).map{it.minutes}.average().toLong() else 0L
     val delta       = total - avg7
@@ -946,7 +923,6 @@ fun TodayTab(
         ((deliberateMin.toFloat() / (deliberateMin + reflexiveMin)) * 100).toInt() else 0
 
     // Longest break between unlocks (approximate from hourly gaps)
-    val emptyHours = days.lastOrNull()?.let { 0 } ?: 0 // placeholder — real value comes from unlockBounds
     val longestBreakStr = if (unlockBounds.first != null && unlockBounds.second != null) {
         val gapMs = unlockBounds.second!! - unlockBounds.first!!
         val gapMin = gapMs / 60_000
@@ -1352,532 +1328,6 @@ fun ExpandedDayDetailScreen(
 }
 
 @Composable
-fun StatsTab(
-    c: SchemeColors,
-    scheme: ColorScheme,
-    days: List<DaySummary>,
-    apps: List<AppUsage>,
-    lastWeekTotal: Long,
-    onRefresh: () -> Unit,
-    onOpenApp: (AppUsage) -> Unit
-) {
-    var section by remember { mutableStateOf(0) }
-    val sections = listOf("Overview", "Patterns", "Apps")
-
-    Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(start = 28.dp, end = 28.dp, top = 52.dp, bottom = 12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top) {
-                Column {
-                    Text("Stats", color = c.text, fontSize = 34.sp, fontWeight = FontWeight.Light)
-                    Spacer(Modifier.height(4.dp))
-                    Text("explore your screen time", color = c.text3, fontSize = 11.sp, letterSpacing = 1.sp)
-                }
-                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(c.surface)
-                    .border(1.dp, c.border, RoundedCornerShape(8.dp)).clickable { onRefresh() }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text("Refresh", color = c.accent, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-            Spacer(Modifier.height(20.dp))
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.surface)
-                .padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                sections.forEachIndexed { index, label ->
-                    val active = section == index
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
-                        .background(if (active) c.accentFaint else Color.Transparent)
-                        .clickable { section = index }.padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center) {
-                        Text(label, color = if (active) c.accent else c.text3, fontSize = 11.sp,
-                            fontWeight = if (active) FontWeight.Medium else FontWeight.Normal)
-                    }
-                }
-            }
-        }
-
-        when (section) {
-            0 -> TrendsTab(c, scheme, days, apps, lastWeekTotal, onRefresh, showHeader = false)
-            1 -> HeatTab(c, apps, onRefresh, onOpenApp, showHeader = false)
-            else -> AllAppsTab(c, apps, onRefresh, onOpenApp, showHeader = false)
-        }
-    }
-}
-
-@Composable
-fun TrendsTab(
-    c: SchemeColors,
-    scheme: ColorScheme,
-    days: List<DaySummary>,
-    apps: List<AppUsage>,
-    lastWeekTotal: Long,
-    onRefresh: () -> Unit,
-    showHeader: Boolean = true
-){
-    // This week = since the most recent Monday, not just the last 7 calendar days.
-    val mondayThisWeek = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0)
-        val daysSinceMonday = (get(Calendar.DAY_OF_WEEK) + 5) % 7 // Mon=0 ... Sun=6
-        add(Calendar.DAY_OF_YEAR, -daysSinceMonday)
-    }.timeInMillis
-    val totalWeek  = days.filter { it.startMillis >= mondayThisWeek }.sumOf { it.minutes }
-    val totalMonth = days.sumOf { it.minutes }
-    val avg7       = if(days.size>=7) days.takeLast(7).dropLast(1).map{it.minutes}.average().toLong() else 0L
-    val avg30      = days.map { it.minutes }.average().toLong()
-    val maxDay     = days.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1L
-    val nonZero    = days.filter { it.minutes > 0 }
-    val best       = nonZero.minByOrNull { it.minutes }
-    val worst      = nonZero.maxByOrNull { it.minutes }
-    val streakDays = days.reversed().takeWhile { it.minutes < avg30 * 1.1 }.size
-
-    // Week-over-week delta
-    val weekDelta     = totalWeek - lastWeekTotal
-    val weekDeltaSign = if (weekDelta >= 0) "↑" else "↓"
-    val weekDeltaCol  = if (weekDelta > 30) c.red else if (weekDelta < -30) c.green else c.text3
-
-    // Day-of-week pattern (index 0 = Monday ... 6 = Sunday)
-    val dowTotals = Array(7) { 0L }
-    val dowCounts = Array(7) { 0 }
-    days.forEach { d ->
-        val cal = Calendar.getInstance()
-        cal.time = SimpleDateFormat("d MMM", Locale.getDefault()).parse(d.date) ?: return@forEach
-        val dow = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 // Calendar.SUNDAY=1..SATURDAY=7 → Mon=0..Sun=6
-        dowTotals[dow] += d.minutes; dowCounts[dow]++
-    }
-    val dowAvg    = Array(7) { i -> if (dowCounts[i]>0) dowTotals[i]/dowCounts[i] else 0L }
-    val dowLabels = listOf("Mo","Tu","We","Th","Fr","Sa","Su")
-    val maxDow    = dowAvg.maxOrNull()?.coerceAtLeast(1) ?: 1L
-
-    LazyColumn(Modifier.fillMaxSize(), contentPadding=PaddingValues(bottom=32.dp)) {
-        if (showHeader) item {
-            ScreenHeader(c, "Stats", "30-day patterns & history", onRefresh)
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            Column(Modifier.padding(horizontal=28.dp)) {
-
-                // Summary cards
-                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    // This week card shows WoW delta
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
-                        .background(c.surface)
-                        .border(1.dp,c.border,RoundedCornerShape(10.dp))
-                        .padding(horizontal=14.dp, vertical=12.dp)) {
-                        Text("THIS WEEK", color=c.text3, fontSize=9.sp, letterSpacing=1.sp)
-                        Spacer(Modifier.height(5.dp))
-                        Text(fmt(totalWeek), color=c.accent, fontSize=20.sp, fontWeight=FontWeight.Light)
-                        if (lastWeekTotal > 0) {
-                            Text("$weekDeltaSign ${fmt(abs(weekDelta))} vs last week",
-                                color=weekDeltaCol, fontSize=10.sp)
-                        } else {
-                            Text("7-day total", color=c.text3, fontSize=9.sp)
-                        }
-                    }
-                    SummaryCard(c,"This month",fmt(totalMonth),"30-day total",Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    SummaryCard(c,"7-day avg",fmt(avg7),"per day",Modifier.weight(1f))
-                    SummaryCard(c,"30-day avg",fmt(avg30),"per day",Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    ExtremeCard(c,"Best day",best?.date?:"—",
-                        fmt(best?.minutes?:0),c.green,Modifier.weight(1f))
-                    ExtremeCard(c,"Worst day",worst?.date?:"—",
-                        fmt(worst?.minutes?:0),c.red,Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                    InsightCard(c,"Under-avg streak","$streakDays days",
-                        "consecutive days at/below avg",Modifier.weight(1f))
-                    InsightCard(c,"Last week total", fmt(lastWeekTotal),
-                        "for comparison",Modifier.weight(1f))
-                }
-
-                Spacer(Modifier.height(28.dp))
-
-                // 30-day bar chart — legend uses the scheme's accentName
-                SectionLabel(c, "30-DAY SCREEN TIME",
-                    "${scheme.accentName} = today · muted = above avg")
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(c.surface)
-                    .border(1.dp,c.border,RoundedCornerShape(14.dp))
-                    .padding(14.dp)) {
-                    Column {
-                        Row(Modifier.fillMaxWidth().height(96.dp),
-                            horizontalArrangement=Arrangement.spacedBy(3.dp),
-                            verticalAlignment=Alignment.Bottom) {
-                            days.forEachIndexed { i, d ->
-                                val isToday  = i == days.lastIndex
-                                val aboveAvg = d.minutes > avg30 * 1.2
-                                val frac = (d.minutes.toFloat()/maxDay).coerceIn(0.02f,1f)
-                                val anim by animateFloatAsState(frac,
-                                    tween(250+i*8, easing=EaseOutCubic))
-                                Box(Modifier.weight(1f).fillMaxHeight(anim)
-                                    .clip(RoundedCornerShape(topStart=2.dp,topEnd=2.dp))
-                                    .background(when {
-                                        isToday  -> c.accent
-                                        aboveAvg -> c.barAbove
-                                        else     -> c.barNormal
-                                    }))
-                            }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                            Text(days.firstOrNull()?.date?:"", color=c.text3, fontSize=9.sp)
-                            Text("today", color=c.accent, fontSize=9.sp)
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        HLine(c)
-                        Spacer(Modifier.height(10.dp))
-                        // Legend labels use accentName, not a hardcoded "tan"
-                        Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                            LegendDot(c.accent, "Today (${scheme.accentName})", c)
-                            LegendDot(c.barAbove, "> 20% avg", c)
-                            LegendDot(c.barNormal, "Normal", c)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(28.dp))
-
-                // Day-of-week pattern
-                SectionLabel(c,"DAY-OF-WEEK PATTERN","your average per weekday")
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(c.surface)
-                    .border(1.dp,c.border,RoundedCornerShape(14.dp))
-                    .padding(14.dp)) {
-                    Column {
-                        Row(Modifier.fillMaxWidth(),
-                            horizontalArrangement=Arrangement.spacedBy(6.dp),
-                            verticalAlignment=Alignment.Bottom) {
-                            dowAvg.forEachIndexed { i, avg ->
-                                val frac = (avg.toFloat()/maxDow).coerceIn(0.02f,1f)
-                                val anim by animateFloatAsState(frac,
-                                    tween(400+i*50, easing=EaseOutCubic))
-                                Column(Modifier.weight(1f),
-                                    horizontalAlignment=Alignment.CenterHorizontally) {
-                                    Box(Modifier.fillMaxWidth().height(52.dp),
-                                        contentAlignment=Alignment.BottomCenter) {
-                                        Box(Modifier.fillMaxWidth().fillMaxHeight(anim)
-                                            .clip(RoundedCornerShape(topStart=3.dp,topEnd=3.dp))
-                                            .background(if(avg==dowAvg.maxOrNull()) c.accent else c.barNormal))
-                                    }
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(dowLabels[i], color=c.text3, fontSize=9.sp)
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        HLine(c)
-                        Spacer(Modifier.height(8.dp))
-                        val heaviestDay = dowLabels[dowAvg.indices.maxByOrNull { dowAvg[it] } ?: 0]
-                        Text("Heaviest day on average: $heaviestDay",
-                            color=c.text3, fontSize=10.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(28.dp))
-                SectionLabel(c,"LIFETIME PER APP","total time ever recorded")
-                Spacer(Modifier.height(4.dp))
-            }
-        }
-
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal=28.dp, vertical=8.dp)) {
-                Text("App · since", color=c.text3, fontSize=10.sp, modifier=Modifier.weight(1f))
-                Text("Total hours", color=c.text3, fontSize=10.sp,
-                    modifier=Modifier.width(80.dp), textAlign=TextAlign.End)
-                Text("Lifetime", color=c.text3, fontSize=10.sp,
-                    modifier=Modifier.width(60.dp), textAlign=TextAlign.End)
-            }
-            HLine(c)
-        }
-
-        items(apps.filter{it.lifetimeMinutes>0}.sortedByDescending{it.lifetimeMinutes}) { app ->
-            Column(Modifier.fillMaxWidth().padding(horizontal=28.dp)) {
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).padding(end=8.dp)) {
-                        Text(app.label, color=c.text, fontSize=14.sp,
-                            fontWeight=FontWeight.Light, maxLines=1,
-                            overflow=TextOverflow.Ellipsis)
-                        Text("since ${fmtDate(app.firstSeen)}", color=c.text3, fontSize=10.sp)
-                    }
-                    Text("${app.lifetimeMinutes/60}h", color=c.text2, fontSize=13.sp,
-                        modifier=Modifier.width(80.dp), textAlign=TextAlign.End)
-                    Text(fmt(app.lifetimeMinutes), color=c.accent, fontSize=13.sp,
-                        fontWeight=FontWeight.Medium,
-                        modifier=Modifier.width(60.dp), textAlign=TextAlign.End)
-                }
-                Spacer(Modifier.height(14.dp))
-                HLine(c)
-            }
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// HEAT TAB
-// ═══════════════════════════════════════════════════════════════
-
-@Composable
-fun HeatTab(
-    c: SchemeColors,
-    apps: List<AppUsage>,
-    onRefresh: () -> Unit,
-    onOpenApp: (AppUsage) -> Unit,
-    showHeader: Boolean = true
-){
-    val merged    = IntArray(24)
-    apps.forEach { a -> a.hourlyMinutes.forEachIndexed { h, m -> merged[h] += m } }
-    val maxHour   = merged.maxOrNull()?.coerceAtLeast(1) ?: 1
-    val peakHour  = merged.indices.maxByOrNull { merged[it] } ?: 0
-    val activeHrs = merged.count { it > 0 }
-    val quietHour = merged.indices.filter { merged[it]>0 }.minByOrNull { merged[it] }
-    val timeFmt   = SimpleDateFormat("h a", Locale.getDefault())
-    fun hourStr(h: Int) = timeFmt.format(
-        Calendar.getInstance().also { it.set(Calendar.HOUR_OF_DAY, h) }.time).lowercase()
-    val segs = listOf(
-        "12 am–6 am" to 0..5, "6 am–12 pm" to 6..11,
-        "12 pm–6 pm" to 12..17, "6 pm–12 am" to 18..23)
-
-    LazyColumn(Modifier.fillMaxSize(), contentPadding=PaddingValues(bottom=32.dp)) {
-        if (showHeader) item {
-            ScreenHeader(c, "Hours", "when are you on your phone?", onRefresh)
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            Column(Modifier.padding(horizontal=28.dp)) {
-                Text("Each cell = minutes used in that hour. Darker = more time.",
-                    color=c.text3, fontSize=11.sp, lineHeight=17.sp)
-                Spacer(Modifier.height(16.dp))
-
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(c.surface)
-                    .border(1.dp,c.border,RoundedCornerShape(14.dp))
-                    .padding(16.dp)) {
-                    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                        segs.forEach { (label, range) ->
-                            Row(Modifier.fillMaxWidth(),
-                                verticalAlignment=Alignment.CenterVertically,
-                                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Text(label, color=c.text3, fontSize=9.sp,
-                                    modifier=Modifier.width(70.dp), letterSpacing=0.2.sp)
-                                Row(Modifier.weight(1f),
-                                    horizontalArrangement=Arrangement.spacedBy(4.dp)) {
-                                    range.forEach { h ->
-                                        val f = merged[h].toFloat() / maxHour
-                                        val anim by animateFloatAsState(f,
-                                            tween(300+h*20, easing=EaseOutCubic))
-                                        Box(Modifier.weight(1f).aspectRatio(1f)
-                                            .clip(RoundedCornerShape(5.dp))
-                                            .background(c.accent.copy(alpha=0.06f+anim*0.88f)),
-                                            contentAlignment=Alignment.Center) {
-                                            if (merged[h]>0)
-                                                Text("${merged[h]}", fontSize=7.sp,
-                                                    color=if(f>0.6f) c.bg else c.accent.copy(alpha=0.9f))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        HLine(c)
-                        Spacer(Modifier.height(8.dp))
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                            Text("12 am", color=c.text3, fontSize=9.sp)
-                            Text("6 am", color=c.text3, fontSize=9.sp)
-                            Text("12 pm", color=c.text3, fontSize=9.sp)
-                            Text("6 pm", color=c.text3, fontSize=9.sp)
-                            Text("11 pm", color=c.text3, fontSize=9.sp)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(c.surface)
-                    .border(1.dp,c.border,RoundedCornerShape(12.dp))
-                    .padding(vertical=16.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceEvenly) {
-                        MetricCell(c,"PEAK HOUR",hourStr(peakHour),"${merged[peakHour]}m used")
-                        VDiv(c)
-                        MetricCell(c,"ACTIVE","$activeHrs hrs","of 24")
-                        VDiv(c)
-                        MetricCell(c,"QUIETEST",
-                            if(quietHour!=null) hourStr(quietHour) else "—",
-                            "${if(quietHour!=null) merged[quietHour] else 0}m")
-                    }
-                }
-
-                Spacer(Modifier.height(28.dp))
-                SectionLabel(c,"PER-APP HOURLY","top 5 apps — bars span midnight to 11 pm")
-                Spacer(Modifier.height(12.dp))
-            }
-        }
-
-        items(apps.take(5)) { app ->
-            val appMax = app.hourlyMinutes.maxOrNull()?.coerceAtLeast(1) ?: 1
-            Column(
-    Modifier
-        .fillMaxWidth()
-        .clickable { onOpenApp(app) }
-        .padding(horizontal=28.dp, vertical=12.dp)
-) {
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                    Text(app.label, color=c.text, fontSize=13.sp,
-                        fontWeight=FontWeight.Light, modifier=Modifier.weight(1f),
-                        maxLines=1, overflow=TextOverflow.Ellipsis)
-                    Text(fmt(app.todayMinutes), color=c.accent, fontSize=12.sp)
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth().height(20.dp),
-                    horizontalArrangement=Arrangement.spacedBy(2.dp),
-                    verticalAlignment=Alignment.Bottom) {
-                    app.hourlyMinutes.forEach { m ->
-                        val f = (m.toFloat()/appMax).coerceIn(0f,1f)
-                        val anim by animateFloatAsState(f, tween(400, easing=EaseOutCubic))
-                        Box(Modifier.weight(1f).fillMaxHeight(anim.coerceAtLeast(0.04f))
-                            .clip(RoundedCornerShape(topStart=1.dp,topEnd=1.dp))
-                            .background(if(m>0) c.accent.copy(alpha=0.4f+f*0.55f) else c.border2))
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                    Text("12 am", color=c.text3, fontSize=8.sp)
-                    Text("12 pm", color=c.text3, fontSize=8.sp)
-                    Text("11 pm", color=c.text3, fontSize=8.sp)
-                }
-                Spacer(Modifier.height(12.dp))
-                HLine(c)
-            }
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ALL APPS TAB
-// ═══════════════════════════════════════════════════════════════
-
-@Composable
-fun AllAppsTab(
-    c: SchemeColors,
-    apps: List<AppUsage>,
-    onRefresh: () -> Unit,
-    onOpenApp: (AppUsage) -> Unit,
-    showHeader: Boolean = true
-) {
-    var sortIdx by remember { mutableStateOf(0) }
-    val sortOptions = listOf("Today","Week","Month","Lifetime","Opens")
-    val sorted = remember(sortIdx, apps) {
-        when(sortIdx) {
-            0 -> apps.sortedByDescending { it.todayMinutes }
-            1 -> apps.sortedByDescending { it.weekMinutes }
-            2 -> apps.sortedByDescending { it.monthMinutes }
-            3 -> apps.sortedByDescending { it.lifetimeMinutes }
-            4 -> apps.sortedByDescending { it.unlockCount }
-            else -> apps
-        }
-    }
-
-    LazyColumn(Modifier.fillMaxSize(), contentPadding=PaddingValues(bottom=32.dp)) {
-        if (showHeader) item {
-            ScreenHeader(c, "Apps", "complete usage breakdown", onRefresh)
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            Column(Modifier.padding(horizontal=28.dp)) {
-                Text("Every app you used today, with all available stats.",
-                    color=c.text3, fontSize=11.sp)
-                Spacer(Modifier.height(14.dp))
-                Text("SORT BY", color=c.text3, fontSize=9.sp, letterSpacing=1.5.sp)
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                    sortOptions.forEachIndexed { i, label ->
-                        val active = sortIdx==i
-                        Box(Modifier.clip(RoundedCornerShape(8.dp))
-                            .background(if(active) c.accentFaint else c.surface)
-                            .border(1.dp,
-                                if(active) c.accentDim.copy(alpha=0.5f) else c.border,
-                                RoundedCornerShape(8.dp))
-                            .clickable { sortIdx=i }
-                            .padding(horizontal=14.dp, vertical=8.dp)) {
-                            Text(label,
-                                color=if(active) c.accent else c.text3,
-                                fontSize=12.sp,
-                                fontWeight=if(active) FontWeight.Medium else FontWeight.Normal)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(20.dp))
-                Row(Modifier.fillMaxWidth().padding(vertical=8.dp)) {
-                    Text("App", color=c.text3, fontSize=10.sp, modifier=Modifier.weight(1f))
-                    Text("Today",
-                        color=if(sortIdx==0) c.accent else c.text3, fontSize=10.sp,
-                        modifier=Modifier.width(44.dp), textAlign=TextAlign.End)
-                    Text("Week",
-                        color=if(sortIdx==1) c.accent else c.text3, fontSize=10.sp,
-                        modifier=Modifier.width(44.dp), textAlign=TextAlign.End)
-                    Text("Month",
-                        color=if(sortIdx==2) c.accent else c.text3, fontSize=10.sp,
-                        modifier=Modifier.width(48.dp), textAlign=TextAlign.End)
-                }
-                HLine(c)
-            }
-        }
-
-        items(sorted) { app ->
-            Column(
-    Modifier
-        .fillMaxWidth()
-        .clickable { onOpenApp(app) }
-        .padding(horizontal = 28.dp)
-) {
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
-                    AppIcon(app.packageName, app.label, c, Modifier.size(34.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f).padding(end=6.dp)) {
-                        Text(app.label, color=c.text, fontSize=14.sp,
-                            fontWeight=FontWeight.Light, maxLines=1,
-                            overflow=TextOverflow.Ellipsis)
-                        Text(app.category, color=c.accentDim, fontSize=10.sp)
-                    }
-                    Text(fmt(app.todayMinutes),
-                        color=if(sortIdx==0) c.accent else c.text2, fontSize=13.sp,
-                        modifier=Modifier.width(44.dp), textAlign=TextAlign.End)
-                    Text(fmt(app.weekMinutes),
-                        color=if(sortIdx==1) c.accent else c.text2, fontSize=13.sp,
-                        modifier=Modifier.width(44.dp), textAlign=TextAlign.End)
-                    Text(fmt(app.monthMinutes),
-                        color=if(sortIdx==2) c.accent else c.text2, fontSize=13.sp,
-                        modifier=Modifier.width(48.dp), textAlign=TextAlign.End)
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(c.surface)
-                    .padding(horizontal=10.dp, vertical=8.dp)) {
-                    DenseCell(c,"Opens","${app.unlockCount}×",Modifier.weight(1f))
-                    DenseCell(c,"Sessions","${app.sessionCount}",Modifier.weight(1f))
-                    DenseCell(c,"Avg",fmt(app.avgSessionMinutes),Modifier.weight(1f))
-                    DenseCell(c,"Longest",fmt(app.longestSessionMinutes),Modifier.weight(1f))
-                    DenseCell(c,"Lifetime",fmt(app.lifetimeMinutes),Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(6.dp))
-                Text("First used ${fmtDate(app.firstSeen)}", color=c.text3, fontSize=9.sp)
-                Spacer(Modifier.height(14.dp))
-                HLine(c)
-            }
-        }
-    }
-}
-@Composable
 fun AppDetailScreen(
     c: SchemeColors,
     app: AppUsage,
@@ -1901,8 +1351,6 @@ fun AppDetailScreen(
     val peakHour = app.hourlyMinutes.indices.maxByOrNull {
         app.hourlyMinutes[it]
     } ?: 0
-
-    val totalHourly = app.hourlyMinutes.sum().coerceAtLeast(1)
 
     val focusScore = when {
         app.shortSessionCount <= 3 && app.avgSessionMinutes >= 10 -> 90
@@ -2383,14 +1831,6 @@ fun MetricCell(c: SchemeColors, label: String, value: String, sub: String) {
 }
 
 @Composable
-fun DenseCell(c: SchemeColors, label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier, horizontalAlignment=Alignment.CenterHorizontally) {
-        Text(value, color=c.text2, fontSize=12.sp, fontWeight=FontWeight.Light)
-        Text(label, color=c.text3, fontSize=9.sp)
-    }
-}
-
-@Composable
 fun InsightCard(c: SchemeColors, label: String, value: String, sub: String,
                 modifier: Modifier = Modifier) {
     Column(modifier
@@ -2464,43 +1904,5 @@ fun ScreenHeader(
                 )
             }
         }
-    }
-}
-@Composable
-fun SummaryCard(c: SchemeColors, label: String, value: String, sub: String,
-                modifier: Modifier = Modifier) {
-    Column(modifier
-        .clip(RoundedCornerShape(10.dp))
-        .background(c.surface)
-        .border(1.dp, c.border, RoundedCornerShape(10.dp))
-        .padding(horizontal=14.dp, vertical=12.dp)) {
-        Text(label.uppercase(), color=c.text3, fontSize=9.sp, letterSpacing=1.sp)
-        Spacer(Modifier.height(5.dp))
-        Text(value, color=c.accent, fontSize=20.sp, fontWeight=FontWeight.Light)
-        Text(sub, color=c.text3, fontSize=9.sp)
-    }
-}
-
-@Composable
-fun ExtremeCard(c: SchemeColors, label: String, date: String, value: String,
-                col: Color, modifier: Modifier = Modifier) {
-    Column(modifier
-        .clip(RoundedCornerShape(10.dp))
-        .background(c.surface)
-        .border(1.dp, c.border, RoundedCornerShape(10.dp))
-        .padding(horizontal=14.dp, vertical=12.dp)) {
-        Text(label.uppercase(), color=c.text3, fontSize=9.sp, letterSpacing=1.sp)
-        Spacer(Modifier.height(5.dp))
-        Text(value, color=col, fontSize=20.sp, fontWeight=FontWeight.Light)
-        Text(date, color=c.text3, fontSize=9.sp)
-    }
-}
-
-@Composable
-fun LegendDot(color: Color, label: String, c: SchemeColors) {
-    Row(verticalAlignment=Alignment.CenterVertically,
-        horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-        Box(Modifier.size(7.dp).clip(RoundedCornerShape(2.dp)).background(color))
-        Text(label, color=c.text3, fontSize=10.sp)
     }
 }
